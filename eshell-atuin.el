@@ -59,7 +59,7 @@
           (with-temp-buffer
             (let ((ret (call-process
                         eshell-atuin-executable nil t nil
-                        "history" "start" input)))
+                        "history" "start" "--" input)))
               (unless (= 0 ret)
                 (error "`atuin history start' retured %s: %s" ret (buffer-string)))
               (buffer-substring-no-properties
@@ -67,27 +67,38 @@
     (setq eshell-atuin--last-command-start (current-time))))
 
 (defun eshell-atuin--post-exec ()
-  (let* ((proc-args `("history" "end" "-e"
-                      ,(number-to-string eshell-last-command-status)
-                      ,@(when eshell-atuin--last-command-start
-                          (list "-d"
-                                (prog1
-                                    (number-to-string
-                                     (float-time
-                                      (time-subtract
-                                       (current-time)
-                                       eshell-atuin--last-command-start)))
-                                  (setq eshell-atuin--last-command-start nil))))
-                      ,eshell-atuin--history-id))
-         (buf (generate-new-buffer "*atuin-output*"))
-         (proc (apply #'start-process "atuin-history-stop" buf
-                      eshell-atuin-executable proc-args)))
-    (set-process-sentinel
-     proc
-     (lambda (process _msg)
-       (pcase (process-status process)
-         ('exit (kill-buffer buf))
-         ('fatal (error "Error in running 'atuin history stop'.  See *atuin-output*")))))))
+  (when eshell-atuin--history-id
+    (let* ((proc-args
+            `(,eshell-atuin-executable
+              "history" "end"
+              "--exit" ,(number-to-string eshell-last-command-status)
+              ,@(when eshell-atuin--last-command-start
+                  (list
+                   "--duration"
+                   (prog1
+                       (concat (number-to-string
+                                (round
+                                 (*
+                                  1000000000 ; nanoseconds
+                                  (float-time
+                                   (time-subtract
+                                    (current-time)
+                                    eshell-atuin--last-command-start))))))
+                     (setq eshell-atuin--last-command-start nil))))
+              ,eshell-atuin--history-id))
+           (buf (generate-new-buffer "*atuin-output*"))
+           (proc (with-environment-variables (("ATUIN_LOG" "error"))
+                   (start-process-shell-command "atuin-history-stop" buf
+                                                (string-join proc-args " ")))))
+      (set-process-sentinel
+       proc
+       (lambda (process _msg)
+         (when (eq (process-status process) 'exit)
+           (unwind-protect
+               (unless (= (process-exit-status process) 0)
+                 (error "`atuin history end' returned %s: %s" (process-exit-status process)
+                        (with-current-buffer buf (buffer-string))))
+             (kill-buffer buf))))))))
 
 (defun eshell-atuin--init-session ()
   (setenv "ATUIN_SESSION"
@@ -110,6 +121,20 @@
           (add-hook 'eshell-post-command-hook #'eshell-atuin--post-exec))
       (advice-remove #'eshell-send-input #'eshell-atuin--pre-exec)
       (remove-hook 'eshell-post-command-hook #'eshell-atuin--post-exec))))
+
+(defun eshell-atuin--get-history ()
+  (with-temp-buffer
+    (let ((ret (call-process
+                eshell-atuin-executable nil t nil
+                "history" "list" "-f" "")))
+      (unless (= 0 ret)
+        (error "`atuin history list' retured %s: %s" ret (buffer-string)))
+      (buffer-substring-no-properties
+       (point-min) (point-max)))))
+
+(defun eshell-atuin-history ()
+  (interactive)
+  )
 
 (provide 'eshell-atuin)
 ;;; eshell-atuin.el ends here
