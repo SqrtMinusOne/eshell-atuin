@@ -264,7 +264,7 @@ This is used to speed up the lookup after `competing-read' in
   (setq eshell-atuin--history-cache nil)
   (setq eshell-atuin--history-last-update nil)
   (setq eshell-atuin--history-cache-index (make-hash-table :test #'equal))
-  (setq eshell-atuin--history-format-index (make-hash-table :test #'equal)))
+  (setq eshell-atuin--history-cache-format-index (make-hash-table :test #'equal)))
 
 (defun eshell-atuin--create-format-flag ()
   "Format `eshell-atuin-search-fields' for usage in the -f flag."
