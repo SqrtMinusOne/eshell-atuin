@@ -42,7 +42,10 @@
 
 ;;; Code:
 (require 'compat)
+(require 'em-prompt)
 (require 'eshell)
+
+(eval-when-compile (require 'subr-x))
 
 (defgroup eshell-atuin ()
   "Intergrate eshell with atuin, a shell history tool."
