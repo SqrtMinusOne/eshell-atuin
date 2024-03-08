@@ -26,10 +26,21 @@
 
 ;;; Commentary:
 
-;; TODO
+;; Integrate `eshell' with atuin <https://github.com/atuinsh/atuin>
+;;
+;; atuin stores shell history in a database, which allows for having
+;; same history across multiple shells, sessions, and optionally
+;; across different machines.  This package provides functionality to
+;; store and browse eshell history in atuin.
+;;
+;; `eshell-atuin-mode' and `eshell-atuin-history' are the
+;; corresponding entrypoints.
+;;
+;; See also the package README at
+;; <https://github.com/SqrtMinusOne/eshell-atuin>
+
 
 ;;; Code:
-(require 'avl-tree)
 (require 'compat)
 (require 'eshell)
 
@@ -47,7 +58,9 @@
   "List of fields to retrive from atuin.
 
 Be sure to keep \"time\" and \"command\" here, otherwise the package
-will not work."
+will not work.
+
+\"relativetime\" will probably not work as expected."
   :group 'eshell-atuin
   :type '(repeat
           (choice
@@ -58,7 +71,12 @@ will not work."
            (const directory)
            (const user)
            (const host)
-           (const relativetime))))
+           (const relativetime)))
+  :set
+  (lambda (sym value)
+    (set-default sym value)
+    (when (fboundp #'eshell-atuin--history-reset)
+      (eshell-atuin--history-reset))))
 
 (defcustom eshell-atuin-history-format "%c"
   "How to format history items.
@@ -74,7 +92,12 @@ corresponding search fields from `eshell-atuin-search-fields':
 - %h - host
 - %r - relativetime"
   :group 'eshell-atuin
-  :type 'file)
+  :type 'file
+  :set
+  (lambda (sym value)
+    (set-default sym value)
+    (when (fboundp #'eshell-atuin--history-reset)
+      (eshell-atuin--history-reset))))
 
 (defcustom eshell-atuin-search-options '("--exit" "0")
   "Additional options for \\='atuin search\\='.
@@ -87,18 +110,25 @@ include here.  Some examples:
   :type '(repeat string))
 
 (defvar-local eshell-atuin--history-id nil
-  "ID of the current atuin history command.")
+  "Atuin ID of the current eshell command.")
 
 (defvar-local eshell-atuin--last-command-start nil
-  "Start time of last eshell command.")
+  "Start time the of current eshell command.")
 
 (defun eshell-atuin--get-input ()
+  "Get eshell input string on the current line."
   (save-excursion
     (beginning-of-line)
     (when (looking-at-p eshell-prompt-regexp)
       (substring-no-properties (eshell-get-old-input)))))
 
 (defun eshell-atuin--pre-exec (&rest _args)
+  "Tell atuin that the command has been invoked.
+
+This calls \\='atuin history start\\=', save the ID to
+`eshell-atuin--history-id' and time to
+`eshell-atuin--last-command-start'.  The ID will be used to save the
+results of the command in `eshell-atuin--post-exec'."
   (when-let ((input (eshell-atuin--get-input)))
     (setq eshell-atuin--history-id
           (with-temp-buffer
@@ -112,6 +142,10 @@ include here.  Some examples:
     (setq eshell-atuin--last-command-start (current-time))))
 
 (defun eshell-atuin--post-exec ()
+  "Tell atuin that the invoked command has finished.
+
+This calls \\='atuin history end\\=' with the duration and exit code
+of the command."
   (when eshell-atuin--history-id
     (let* ((proc-args
             `(,eshell-atuin-executable
@@ -130,6 +164,8 @@ include here.  Some examples:
                      (setq eshell-atuin--last-command-start nil))))
               ,eshell-atuin--history-id))
            (buf (generate-new-buffer "*atuin-output*"))
+           ;; XXX No idea why `call-process' or `start-process' don't
+           ;; work here.
            (proc (with-environment-variables (("ATUIN_LOG" "error"))
                    (start-process-shell-command "atuin-history-stop" buf
                                                 (string-join proc-args " ")))))
@@ -141,9 +177,11 @@ include here.  Some examples:
                (unless (= (process-exit-status process) 0)
                  (error "`atuin history end' returned %s: %s" (process-exit-status process)
                         (with-current-buffer buf (buffer-string))))
-             (kill-buffer buf))))))))
+             (kill-buffer buf))))))
+    (setq eshell-atuin--history-id nil)))
 
 (defun eshell-atuin--init-session ()
+  "Initialize `eshell-atuin' session, one session per Emacs."
   (setenv "ATUIN_SESSION"
           (string-trim
            (with-output-to-string
@@ -152,7 +190,7 @@ include here.  Some examples:
 
 ;;;###autoload
 (define-minor-mode eshell-atuin-mode
-  "TODO"
+  "Store `eshell' history in atuin."
   :global t
   :group 'eshell-atuin
   :after-hook
@@ -166,17 +204,67 @@ include here.  Some examples:
       (remove-hook 'eshell-post-command-hook #'eshell-atuin--post-exec))))
 
 (defun eshell-atuin--compare (a b)
-  (string-lessp
-   (alist-get 'time a)
-   (alist-get 'time b)))
+  "Compare two `eshell-atuin' history objects, A and B.
 
-(defvar eshell-atuin--history-cache (avl-tree-create #'eshell-atuin--compare)
-  "TODO.")
+See `eshell-atuin--history-cache' for value format."
+  (unless (string-equal (alist-get 'command a)
+                        (alist-get 'command b))
+    (string-lessp
+     (alist-get 'time a)
+     (alist-get 'time b))))
+
+(defvar eshell-atuin--history-cache nil
+  "A list with shell history data from atuin.
+
+This works something like an ordered set: the list is orded by time;
+there's only one item for each command.
+
+One element is an alist with keys as configured in
+`eshell-atuin-search-fields' and values as returned by \\='atuin
+search\\='.  That commands returns values already sorted by time and
+grouped by commands.
+
+The cache is used to avoid unncessary parsing of the output of the
+mentioned command.  `eshell-atuin--history-update' sets
+`eshell-atuin--history-last-update' and queries atuin only for results
+after that time.  That way, the cache is updated incrementally.
+
+New records are added as follows.
+
+`eshell-atuin--history-cache-index' is a hash table with commands as
+keys and pointers to this list as values.  If there's already a
+command with the same name as the new one, it is deleted from the
+list via that pointer.
+
+This preserves ordering and unqiness of elements without iterating
+through the entire list on each update.")
+
+(defvar eshell-atuin--history-cache-index (make-hash-table :test #'equal)
+  "An \"index\" for `eshell-atuin--history-cache'.
+
+See the variable for how it works.")
+
+(defvar eshell-atuin--history-cache-format-index (make-hash-table :test #'equal)
+  "A hash table to map formatted commands to raw commands.
+
+The values are alists as defined in `eshell-atuin--history-cache'; the
+keys are formatted values, created by `eshell-atuin-history-format'.
+
+This is used to speed up the lookup after `competing-read' in
+`eshell-atuin-history'.")
 
 (defvar eshell-atuin--history-last-update nil
-  "TODO.")
+  "The time of update of `eshell-atuin--history-cache'.")
+
+(defun eshell-atuin--history-reset ()
+  "Reset `eshell-atuin' history cache."
+  (setq eshell-atuin--history-cache nil)
+  (setq eshell-atuin--history-last-update nil)
+  (setq eshell-atuin--history-cache-index (make-hash-table :test #'equal))
+  (setq eshell-atuin--history-format-index (make-hash-table :test #'equal)))
 
 (defun eshell-atuin--create-format-flag ()
+  "Format `eshell-atuin-search-fields' for usage in the -f flag."
   (mapconcat
    (lambda (item)
      (format "{%s}" item))
@@ -184,11 +272,50 @@ include here.  Some examples:
    "\\t"))
 
 (defun eshell-atuin--parse-history-line (line)
-  (cl-loop for field in eshell-atuin-search-fields
-           for value in (string-split line "\t")
-           collect (cons field value)))
+  "Parse one LINE of \\='atuin search\\='.
 
-(defun eshell-atuin--history-list ()
+This only works for lines created with the value of the -f flag from
+`eshell-atuin--create-format-flag'."
+  (let ((e (cl-loop for field in eshell-atuin-search-fields
+                    for value in (string-split line "\t")
+                    collect (cons field value))))
+    (when (alist-get 'command e)
+      (setf (alist-get 'formatted-value e)
+            (format-spec eshell-atuin-history-format
+                         `((?t . ,(alist-get 'time e))
+                           (?e . ,(alist-get 'exit e))
+                           (?d . ,(alist-get 'duration e))
+                           (?c . ,(alist-get 'command e))
+                           (?i . ,(alist-get 'directory e))
+                           (?h . ,(alist-get 'host e))
+                           (?r . ,(alist-get 'relativetime e))))))
+    e))
+
+(defun eshell-atuin--add-datum-to-cache (datum)
+  "Add DATUM to `eshell-atuin' cache.
+
+The cache is `eshell-atuin--history-cache', which see."
+  (when-let ((cell (gethash (alist-get 'command datum)
+                            eshell-atuin--history-cache-index)))
+    (setf (cdr cell) (cddr cell))
+    (puthash (alist-get 'command (cadr cell))
+             cell eshell-atuin--history-cache-index))
+  (when (string-equal (alist-get 'command datum)
+                      (alist-get 'command (car eshell-atuin--history-cache)))
+    (setq eshell-atuin--history-cache
+          (cdr eshell-atuin--history-cache)))
+  (push datum eshell-atuin--history-cache)
+  (puthash (alist-get 'command (cadr eshell-atuin--history-cache))
+           eshell-atuin--history-cache
+           eshell-atuin--history-cache-index)
+  (puthash (alist-get 'formatted-value datum)
+           datum
+           eshell-atuin--history-cache-format-index))
+
+(defun eshell-atuin--history-update ()
+  "Run \\='atuin search\\=' and update the `atuin-eshell' cache.
+
+See `eshell-atuin--history-cache' on algorithm."
   (with-temp-buffer
     (let* ((proc-args `("search" "-f" ,(eshell-atuin--create-format-flag)
                         ,@(when eshell-atuin--history-last-update
@@ -201,48 +328,59 @@ include here.  Some examples:
                                     (format "%s seconds ago"))))
                         ,@eshell-atuin-search-options))
            (ret (apply #'call-process eshell-atuin-executable
-                       nil t nil proc-args))
-           (commands (make-hash-table :test #'equal)))
+                       nil t nil proc-args)))
       (unless (or (= 0 ret) (= 1 ret))
         (error "`atuin history list' retured %s: %s" ret (buffer-string)))
       (goto-char (point-min))
-      (cl-loop while (not (eobp))
-               for line = (buffer-substring-no-properties
-                           (line-beginning-position)
-                           (line-end-position))
-               for datum = (eshell-atuin--parse-history-line line)
-               if (alist-get 'command datum) collect datum
-               do (forward-line 1)))))
-
-(defun eshell-atuin--history-update ()
-  (cl-loop for line in (eshell-atuin--history-list)
-           do (avl-tree-enter eshell-atuin--history-cache line))
+      (cl-loop
+       while (not (eobp))
+       for line = (buffer-substring-no-properties
+                   (line-beginning-position)
+                   (line-end-position))
+       for datum = (eshell-atuin--parse-history-line line)
+       do (eshell-atuin--add-datum-to-cache datum)
+       do (forward-line 1))))
   (setq eshell-atuin--history-last-update (current-time)))
 
 (defun eshell-atuin--history-collection ()
-  (avl-tree-mapf
+  "Return an alist with `eshell-atuin' history.
+
+The keys are formatted by `eshell-atuin-history-format'; the values
+are plain commands."
+  (mapcar
    (lambda (e)
      (cons
-      (format-spec eshell-atuin-history-format
-                   `((?t . ,(alist-get 'time e))
-                     (?e . ,(alist-get 'exit e))
-                     (?d . ,(alist-get 'duration e))
-                     (?c . ,(alist-get 'command e))
-                     (?i . ,(alist-get 'directory e))
-                     (?h . ,(alist-get 'host e))
-                     (?r . ,(alist-get 'relativetime e))))
+      (alist-get 'formatted-value e)
       (alist-get 'command e)))
-   #'cons
    eshell-atuin--history-cache))
 
 (defun eshell-atuin-history ()
+  "Browse atuin history in Eshell.
+
+`eshell-atuin-mode' enables storing eshell history in atuin in
+addition to the built-in ring.  `eshell-atuin-history' opens
+`completing-read' with the saved history, like the C-r shell binding
+in the original tool.
+
+By default, the completion UI shows only commands.  To change that,
+add more fields to `eshell-atuin-search-fields' and use them in
+`eshell-atuin-history-format'.  The default values are such for
+backwards compatibility with \"non-vertical\" completion systems.
+
+The completions are ordered; the first one is the most recent one.
+
+Be sure to have the correct `eshell-prompt-regexp' set up!"
   (interactive)
+  (eshell-atuin--history-update)
   (let* ((commands (eshell-atuin--history-collection))
          (input (eshell-atuin--get-input))
-         (compl (completing-read "History: " commands nil t input)))
+         (compl (completing-read "History: " commands nil t input))
+         (command
+          (alist-get 'command
+                     (gethash compl eshell-atuin--history-cache-format-index))))
     (eshell-bol)
     (delete-region (point) (line-end-position))
-    (insert compl)))
+    (insert command)))
 
 (provide 'eshell-atuin)
 ;;; eshell-atuin.el ends here
