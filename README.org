@@ -2,13 +2,15 @@
 
 Integrate [[https://www.gnu.org/software/emacs/manual/html_mono/eshell.html][eshell]] with [[https://github.com/atuinsh/atuin][atuin]].
 
-=atuin= stores shell history in a database, which allows for having the same history across multiple shells, sessions, and optionally across different machines. This package provides functionality to store and browse eshell history in =atuin=.
+=atuin= stores shell history in a database, which allows for having the same history across multiple shells, sessions, and optionally across different machines. See the project page for the complete list of features.
+
+This package provides functionality to store and browse eshell history in =atuin=.
 
 * Installation
 The package isn't yet available anywhere but in this repository. My preferred way for such cases is [[https://github.com/jwiegley/use-package][use-package]] and [[https://github.com/radian-software/straight.el][straight.el]].
 
 #+begin_src emacs-lisp
-(use-package atuin
+(use-package eshell-atuin
   :straight (:host github :repo "SqrtMinusOne/eshell-atuin")
   :after eshell
   :config
