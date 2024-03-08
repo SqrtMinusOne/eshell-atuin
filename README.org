@@ -1,1 +1,61 @@
 #+TITLE: eshell-atuin
+
+Integrate [[https://www.gnu.org/software/emacs/manual/html_mono/eshell.html][eshell]] with [[https://github.com/atuinsh/atuin][atuin]].
+
+=atuin= stores shell history in a database, which allows for having the same history across multiple shells, sessions, and optionally across different machines. This package provides functionality to store and browse eshell history in =atuin=.
+
+* Installation
+The package isn't yet available anywhere but in this repository. My preferred way for such cases is [[https://github.com/jwiegley/use-package][use-package]] and [[https://github.com/radian-software/straight.el][straight.el]].
+
+#+begin_src emacs-lisp
+(use-package atuin
+  :straight (:host github :repo "SqrtMinusOne/eshell-atuin")
+  :after eshell
+  :config
+  (eshell-atuin-mode))
+#+end_src
+
+Alternatively, clone the repository, add it to the =load-path=, and =require= the package.
+
+* Configuration
+If your =atuin= binary is located in a place unknown to =executable-find=, set the =atuin-executable= variable.
+
+If you are using a vertical completion system such as [[https://github.com/abo-abo/swiper][Ivy]], [[https://github.com/radian-software/selectrum][Selectrum]], etc., you can configure the completion interface, e.g.:
+
+#+begin_src emacs-lisp
+(setq eshell-atuin-search-fields '(time duration command))
+(setq eshell-atuin-history-format "%-160c %t + %d")
+#+end_src
+
+The available flags are:
+| Flag | atuin field (see =help atuin search=) | Required |
+|------+---------------------------------------+----------|
+| %t   | =time=                                | *+*      |
+| %c   | =command=                             | *+*      |
+| %e   | =exit=                                |          |
+| %d   | =duration=                            |          |
+| %i   | =directory=                           |          |
+| %u   | =user=                                |          |
+| %h   | =host=                                |          |
+| %r   | =relativetime=                        |          |
+
+See [[https://www.gnu.org/software/emacs/manual/html_node/elisp/Custom-Format-Strings.html][(emacs) Custom Format Strings]] for information on the general =format-spec= syntax.
+
+I suspect the package might be slow if your history has a lot of records (I haven't checked yet). In this case, it might be worth setting a limit:
+#+begin_src emacs-lisp
+(setq eshell-atuin-search-options '("--exit" "0" "--limit" "10000"))
+#+end_src
+
+* Usage
+Enable =eshell-atuin-mode= to turn on storing eshell commands in =atuin=.
+
+Run =eshell-atuin-history= inside an =eshell= buffer to browse the saved history. Accepting the completion will insert the command.
+
+* Implementation notes
+I may have overengineered the package a bit to scale on lots of records.
+
+The package caches the results of =atuin search= in =eshell-atuin--history-cache= (which see on the algorithm), and updates the cache incrementally. A formatted string for each entry is created at the moment of addition; entries are additionally "indexed" by a hashmap to lookup "raw" commands by their formatted versions.
+
+So, the only places I see with the computational complexity of O(N), where N is the number of unique commands in =atuin=, are:
+- populating the cache at the first run of =M-x eshell-atuin-history=;
+- feeding the entirety of the cache to =completing-read= on each run of =M-x eshell-atuin-history=.
