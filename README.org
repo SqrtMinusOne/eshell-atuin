@@ -19,6 +19,11 @@ The package isn't yet available anywhere but in this repository. My preferred wa
 
 Alternatively, clone the repository, add it to the =load-path=, and =require= the package.
 
+If your version of =atuin= is less than 18, turn off saving command durations:
+#+begin_src emacs-lisp
+(setq eshell-atuin-save-duration nil)
+#+end_src
+
 * Configuration
 If your =atuin= binary is located in a place unknown to =executable-find=, set the =atuin-executable= variable.
 

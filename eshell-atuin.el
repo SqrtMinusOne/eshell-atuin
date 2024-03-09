@@ -81,6 +81,13 @@ will not work.
     (when (fboundp #'eshell-atuin--history-reset)
       (eshell-atuin--history-reset))))
 
+(defcustom eshell-atuin-save-duration t
+  "Whether to save command duration.
+
+Set to nil if your atuin version is less than 18."
+  :group 'eshell-atuin
+  :type 'boolean)
+
 (defcustom eshell-atuin-history-format "%c"
   "How to format history items.
 
@@ -154,7 +161,8 @@ of the command."
             `(,eshell-atuin-executable
               "history" "end"
               "--exit" ,(number-to-string eshell-last-command-status)
-              ,@(when eshell-atuin--last-command-start
+              ,@(when (and eshell-atuin--last-command-start
+                           eshell-atuin-save-duration)
                   (list
                    "--duration"
                    (prog1
