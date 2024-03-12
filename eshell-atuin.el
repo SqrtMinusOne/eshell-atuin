@@ -125,6 +125,9 @@ include here.  Some examples:
 (defvar-local eshell-atuin--last-command-start nil
   "Start time the of current eshell command.")
 
+(defvar eshell-atuin--session-id nil
+  "Current atuin session ID.")
+
 (defun eshell-atuin--get-input ()
   "Get eshell input string on the current line."
   (save-excursion
@@ -142,13 +145,14 @@ results of the command in `eshell-atuin--post-exec'."
   (when-let ((input (eshell-atuin--get-input)))
     (setq eshell-atuin--history-id
           (with-temp-buffer
-            (let ((ret (call-process
-                        eshell-atuin-executable nil t nil
-                        "history" "start" "--" input)))
-              (unless (= 0 ret)
-                (error "`atuin history start' retured %s: %s" ret (buffer-string)))
-              (buffer-substring-no-properties
-               (point-min) (point-max)))))
+            (with-environment-variables (("ATUIN_SESSION" eshell-atuin--session-id))
+              (let ((ret (call-process
+                          eshell-atuin-executable nil t nil
+                          "history" "start" "--" input)))
+                (unless (= 0 ret)
+                  (error "`atuin history start' retured %s: %s" ret (buffer-string)))
+                (buffer-substring-no-properties
+                 (point-min) (point-max))))))
     (setq eshell-atuin--last-command-start (current-time))))
 
 (defun eshell-atuin--post-exec ()
@@ -177,7 +181,9 @@ of the command."
            (buf (generate-new-buffer "*atuin-output*"))
            ;; XXX No idea why `call-process' or `start-process' don't
            ;; work here.
-           (proc (with-environment-variables (("ATUIN_LOG" "error"))
+           (proc (with-environment-variables
+                     (("ATUIN_LOG" "error")
+                      ("ATUIN_SESSION" eshell-atuin--session-id))
                    (start-process-shell-command "atuin-history-stop" buf
                                                 (string-join proc-args " ")))))
       (set-process-sentinel
@@ -193,11 +199,12 @@ of the command."
 
 (defun eshell-atuin--init-session ()
   "Initialize `eshell-atuin' session, one session per Emacs."
-  (setenv "ATUIN_SESSION"
-          (string-trim
-           (with-output-to-string
-             (with-current-buffer standard-output
-               (call-process eshell-atuin-executable nil t nil "uuid"))))))
+  (setq eshell-atuin--session-id
+        (string-trim
+         (with-output-to-string
+           (with-current-buffer standard-output
+             (call-process eshell-atuin-executable nil t nil "uuid")))))
+  (setenv "ATUIN_SESSION" eshell-atuin--session-id))
 
 ;;;###autoload
 (define-minor-mode eshell-atuin-mode
@@ -338,8 +345,10 @@ See `eshell-atuin--history-cache' on algorithm."
                                     (round)
                                     (format "%s seconds ago"))))
                         ,@eshell-atuin-search-options))
-           (ret (apply #'call-process eshell-atuin-executable
-                       nil t nil proc-args)))
+           (ret (with-environment-variables
+                    (("ATUIN_SESSION" eshell-atuin--session-id))
+                  (apply #'call-process eshell-atuin-executable
+                         nil t nil proc-args))))
       (unless (or (= 0 ret) (= 1 ret))
         (error "`atuin history list' retured %s: %s" ret (buffer-string)))
       (goto-char (point-min))
