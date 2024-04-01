@@ -1,5 +1,7 @@
 #+TITLE: eshell-atuin
 
+[[https://melpa.org/#/eshell-atuin][file:https://melpa.org/packages/eshell-atuin-badge.svg]]
+
 Integrate [[https://www.gnu.org/software/emacs/manual/html_mono/eshell.html][eshell]] with [[https://github.com/atuinsh/atuin][atuin]].
 
 =atuin= stores shell history in a database, which allows for having the same history across multiple shells, sessions, and optionally across different machines. See the project page for the complete list of features.
