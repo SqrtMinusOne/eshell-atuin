@@ -1,4 +1,4 @@
-;;; eshell-atuin.el --- Intergrate eshell with atuin, a shell history tool -*- lexical-binding: t -*-
+;;; eshell-atuin.el --- Integrate eshell with atuin, a shell history tool -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2024 Korytov Pavel
 
@@ -6,7 +6,7 @@
 ;; Maintainer: Korytov Pavel <thexcloud@gmail.com>
 ;; Version: 0.2.0
 ;; Package-Requires: ((emacs "27.1") (compat "29.1.4.1"))
-;; Homepage: https://github.com/SqrtMinusOne/eshell-atuin.el
+;; Homepage: https://github.com/SqrtMinusOne/eshell-atuin
 ;; Published-At: 2024-03-08
 
 ;; This file is NOT part of GNU Emacs.
