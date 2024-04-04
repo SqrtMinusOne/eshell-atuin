@@ -394,13 +394,13 @@ Be sure to have the correct `eshell-prompt-regexp' set up!"
   (eshell-atuin--history-update)
   (let* ((commands (eshell-atuin--history-collection))
          (input (eshell-atuin--get-input))
-         (compl (completing-read "History: " commands nil t input))
+         (compl (completing-read "History: " commands nil nil input))
          (command
           (alist-get 'command
                      (gethash compl eshell-atuin--history-cache-format-index))))
     (eshell-bol)
     (delete-region (point) (line-end-position))
-    (insert command)))
+    (insert (or command compl))))
 
 (provide 'eshell-atuin)
 ;;; eshell-atuin.el ends here
