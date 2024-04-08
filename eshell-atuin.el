@@ -128,10 +128,15 @@ include here.  Some examples:
 (defvar eshell-atuin--session-id nil
   "Current atuin session ID.")
 
+(defun eshell-atuin--bol-ignoring-prompt ()
+  (if (fboundp 'eshell-bol-ignoring-prompt)
+      (eshell-bol-ignoring-prompt nil)
+    (beginning-of-line)))
+
 (defun eshell-atuin--get-input ()
   "Get eshell input string on the current line."
   (save-excursion
-    (beginning-of-line)
+    (eshell-atuin--bol-ignoring-prompt)
     (when (looking-at-p eshell-prompt-regexp)
       (substring-no-properties (eshell-get-old-input)))))
 
