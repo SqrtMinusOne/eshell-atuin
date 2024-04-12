@@ -9,11 +9,11 @@ Integrate [[https://www.gnu.org/software/emacs/manual/html_mono/eshell.html][esh
 This package provides functionality to store and browse eshell history in =atuin=.
 
 * Installation
-The package isn't yet available anywhere but in this repository. My preferred way for such cases is [[https://github.com/jwiegley/use-package][use-package]] and [[https://github.com/radian-software/straight.el][straight.el]].
+The package is available on MELPA. Install it however you normally install packages, I prefer [[https://github.com/jwiegley/use-package][use-package]] and [[https://github.com/radian-software/straight.el][straight.el]]:
 
 #+begin_src emacs-lisp
 (use-package eshell-atuin
-  :straight (:host github :repo "SqrtMinusOne/eshell-atuin")
+  :straight t
   :after eshell
   :config
   (eshell-atuin-mode))
