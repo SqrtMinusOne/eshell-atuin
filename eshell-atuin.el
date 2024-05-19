@@ -117,7 +117,12 @@ include here.  Some examples:
 - \\='(\"--exit\" \"0\") to filter out non-zero exit codes.
 - \\='(\"--exclude-cwd\" \"/some/dir\")"
   :group 'eshell-atuin
-  :type '(repeat string))
+  :type '(repeat string)
+  :set
+  (lambda (sym value)
+    (set-default sym value)
+    (when (fboundp #'eshell-atuin--history-reset)
+      (eshell-atuin--history-reset))))
 
 (defvar-local eshell-atuin--history-id nil
   "Atuin ID of the current eshell command.")
