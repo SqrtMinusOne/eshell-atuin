@@ -173,7 +173,10 @@ results of the command in `eshell-atuin--post-exec'."
   (when-let ((input (eshell-atuin--get-input)))
     (setq eshell-atuin--history-id
           (with-temp-buffer
-            (with-environment-variables (("ATUIN_SESSION" eshell-atuin--session-id))
+            (with-environment-variables (("ATUIN_SESSION" eshell-atuin--session-id)
+                                         ("ATUIN_HOST_NAME"
+                                          (or (file-remote-p default-directory 'host)
+                                              (system-name))) )
               (let ((ret (call-process
                           eshell-atuin-executable nil t nil
                           "history" "start" "--" input)))
@@ -211,7 +214,10 @@ of the command."
            ;; work here.
            (proc (with-environment-variables
                      (("ATUIN_LOG" "error")
-                      ("ATUIN_SESSION" eshell-atuin--session-id))
+                      ("ATUIN_SESSION" eshell-atuin--session-id)
+                      ("ATUIN_HOST_NAME"
+                       (or (file-remote-p default-directory 'host)
+                           (system-name))))
                    (start-process-shell-command "atuin-history-stop" buf
                                                 (string-join proc-args " ")))))
       (set-process-sentinel
@@ -318,7 +324,8 @@ This is used to speed up the lookup after `competing-read' in
 
 (defun eshell-atuin--history-cache-p (filter-mode)
   "Return non-nil if atuin search with FILTER-MODE has to be cached."
-  (memq filter-mode '(nil global host session)))
+  (or (memq filter-mode '(nil global session))
+      (and (eq filter-mode 'host) (null (file-remote-p default-directory 'host)))))
 
 (defun eshell-atuin--history-rotate-cache ()
   "Rotate `eshell-atuin' history cache by filter mode.
@@ -425,7 +432,9 @@ See `eshell-atuin--history-cache' on algorithm."
                                   (symbol-name eshell-atuin-filter-mode)))
                         ,@eshell-atuin-search-options))
            (ret (with-environment-variables
-                    (("ATUIN_SESSION" eshell-atuin--session-id))
+                    (("ATUIN_SESSION" eshell-atuin--session-id)
+                     ("ATUIN_HOST_NAME" (or (file-remote-p default-directory 'host)
+                                            (system-name))))
                   (apply #'call-process eshell-atuin-executable
                          nil t nil proc-args))))
       (unless (or (= 0 ret) (= 1 ret))
