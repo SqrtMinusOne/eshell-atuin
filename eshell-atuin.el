@@ -349,7 +349,7 @@ and refilled on each invokation of `eshell-atuin-history'"
               (format-index . ,eshell-atuin--history-cache-format-index)
               (last-update . ,eshell-atuin--history-last-update))))
     ;; Load new cache, if necessary and available.
-    (if-let ((_ (eshell-atuin--history-cache-p eshell-atuin-filter-mode))
+    (if-let ((noop (eshell-atuin--history-cache-p eshell-atuin-filter-mode))
              (other-cache
               (alist-get eshell-atuin-filter-mode
                          eshell-atuin--history-cache-other-filter-modes)))
