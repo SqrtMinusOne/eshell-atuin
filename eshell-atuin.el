@@ -124,6 +124,19 @@ include here.  Some examples:
     (when (fboundp #'eshell-atuin--history-reset)
       (eshell-atuin--history-reset))))
 
+(defconst eshell-atuin-filter-modes '(global host session directory)
+  "List of filter modes for \\='atuin search\\='.")
+
+(defcustom eshell-atuin-filter-mode nil
+  "Default filter mode for \\'atuin search\\='."
+  :group 'eshell-atuin
+  :type '(choice
+          (const nil :tag "Use default filter")
+          (const 'global :tag "All hosts, all sessions, all directories")
+          (const 'host :tag "History just from this host")
+          (const 'session :tag "History just from this session")
+          (const 'directory :tag "History just from this directory")))
+
 (defvar-local eshell-atuin--history-id nil
   "Atuin ID of the current eshell command.")
 
@@ -226,6 +239,7 @@ of the command."
     (if eshell-atuin-mode
         (progn
           (eshell-atuin--init-session)
+          (eshell-atuin--history-reset)
           (advice-add #'eshell-send-input :before #'eshell-atuin--pre-exec)
           (add-hook 'eshell-post-command-hook #'eshell-atuin--post-exec))
       (advice-remove #'eshell-send-input #'eshell-atuin--pre-exec)
@@ -284,12 +298,59 @@ This is used to speed up the lookup after `competing-read' in
 (defvar eshell-atuin--history-last-update nil
   "The time of update of `eshell-atuin--history-cache'.")
 
+(defvar eshell-atuin--history-cache-current-filter-mode nil
+  "Current filter mode for `eshell-atuin--history-cache'.")
+
+(defvar eshell-atuin--history-cache-other-filter-modes nil
+  "Values of eshell-aution cache variables for other filter modes.")
+
 (defun eshell-atuin--history-reset ()
   "Reset `eshell-atuin' history cache."
   (setq eshell-atuin--history-cache nil)
   (setq eshell-atuin--history-last-update nil)
   (setq eshell-atuin--history-cache-index (make-hash-table :test #'equal))
   (setq eshell-atuin--history-cache-format-index (make-hash-table :test #'equal)))
+
+(defun eshell-atuin--history-cache-p (filter-mode)
+  "Return non-nil if atuin search with FILTER-MODE has to be cached."
+  (memq filter-mode '(nil global host session)))
+
+(defun eshell-atuin--history-rotate-cache ()
+  "Rotate `eshell-atuin' history cache by filter mode.
+
+When the filter mode changes, the cache is saved and the new one is
+loaded, if available.
+
+If the current filter mode should not be cached, the cache is
+reset because the `eshell-atuin--history-collection' can only get
+history from the cache.  Essentially, in this case the cache is reset
+and refilled on each invokation of `eshell-atuin-history'"
+  (unless (eq eshell-atuin-filter-mode
+              eshell-atuin--history-cache-current-filter-mode)
+    ;; Save current cache, if necessary.
+    (when (eshell-atuin--history-cache-p
+           eshell-atuin--history-cache-current-filter-mode)
+      (setf (alist-get eshell-atuin--history-cache-current-filter-mode
+                       eshell-atuin--history-cache-other-filter-modes)
+            `((cache . ,eshell-atuin--history-cache)
+              (index . ,eshell-atuin--history-cache-index)
+              (format-index . ,eshell-atuin--history-cache-format-index)
+              (last-update . ,eshell-atuin--history-last-update))))
+    ;; Load new cache, if necessary and available.
+    (if-let ((_ (eshell-atuin--history-cache-p eshell-atuin-filter-mode))
+             (other-cache
+              (alist-get eshell-atuin-filter-mode
+                         eshell-atuin--history-cache-other-filter-modes)))
+        (let-alist other-cache
+          (setq eshell-atuin--history-cache .cache)
+          (setq eshell-atuin--history-cache-index .index)
+          (setq eshell-atuin--history-cache-format-index .format-index)
+          (setq eshell-atuin--history-last-update .last-update))
+      (eshell-atuin--history-reset))
+    (setq eshell-atuin--history-cache-current-filter-mode eshell-atuin-filter-mode))
+  ;; Reset cache if necessary.
+  (unless (eshell-atuin--history-cache-p eshell-atuin-filter-mode)
+    (eshell-atuin--history-reset)))
 
 (defun eshell-atuin--create-format-flag ()
   "Format `eshell-atuin-search-fields' for usage in the -f flag."
@@ -354,6 +415,9 @@ See `eshell-atuin--history-cache' on algorithm."
                                     (float-time)
                                     (round)
                                     (format "%s seconds ago"))))
+                        ,@(when eshell-atuin-filter-mode
+                            (list "--filter-mode"
+                                  (symbol-name eshell-atuin-filter-mode)))
                         ,@eshell-atuin-search-options))
            (ret (with-environment-variables
                     (("ATUIN_SESSION" eshell-atuin--session-id))
@@ -384,13 +448,17 @@ are plain commands."
       (alist-get 'command e)))
    eshell-atuin--history-cache))
 
-(defun eshell-atuin-history ()
+(defun eshell-atuin-history (&optional arg)
   "Browse atuin history in Eshell.
 
 `eshell-atuin-mode' enables storing eshell history in atuin in
 addition to the built-in ring.  `eshell-atuin-history' opens
 `completing-read' with the saved history, like the C-r shell binding
 in the original tool.
+
+ARG overrides the default filter mode (which is
+`eshell-atuin-filter-mode').  The value is an index of
+`eshell-atuin-filter-modes'.
 
 By default, the completion UI shows only commands.  To change that,
 add more fields to `eshell-atuin-search-fields' and use them in
@@ -400,8 +468,14 @@ backwards compatibility with \"non-vertical\" completion systems.
 The completions are ordered; the first one is the most recent one.
 
 Be sure to have the correct `eshell-prompt-regexp' set up!"
-  (interactive)
-  (eshell-atuin--history-update)
+  (interactive "P")
+  (let ((eshell-atuin-filter-mode
+         (if arg
+             (or (nth arg eshell-atuin-filter-modes)
+                 (user-error "Invalid filter mode index: %s" arg))
+           eshell-atuin-filter-mode)))
+    (eshell-atuin--history-rotate-cache)
+    (eshell-atuin--history-update))
   (let* ((commands (eshell-atuin--history-collection))
          (input (eshell-atuin--get-input))
          (compl (completing-read "History: " commands nil nil input))
