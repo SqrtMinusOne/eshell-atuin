@@ -132,10 +132,15 @@ include here.  Some examples:
   :group 'eshell-atuin
   :type '(choice
           (const nil :tag "Use default filter")
-          (const 'global :tag "All hosts, all sessions, all directories")
-          (const 'host :tag "History just from this host")
-          (const 'session :tag "History just from this session")
-          (const 'directory :tag "History just from this directory")))
+          (const global :tag "All hosts, all sessions, all directories")
+          (const host :tag "History just from this host")
+          (const session :tag "History just from this session")
+          (const directory :tag "History just from this directory"))
+  :set
+  (lambda (sym value)
+    (set-default sym value)
+    (when (fboundp #'eshell-atuin--history-rotate-cache)
+      (eshell-atuin--history-rotate-cache))))
 
 (defvar-local eshell-atuin--history-id nil
   "Atuin ID of the current eshell command.")

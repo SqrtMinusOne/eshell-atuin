@@ -60,6 +60,19 @@ Enable =eshell-atuin-mode= to turn on storing eshell commands in =atuin=.
 
 Run =eshell-atuin-history= inside an =eshell= buffer to browse the saved history. Accepting the completion will insert the command.
 
+** Filter mode
+=atuin= supports 4 [[https://docs.atuin.sh/configuration/config/#filter_mode][filter modes]]: global (default), host, session, directory. Default filter mode for =eshell-atuin= can be set as follows:
+
+#+begin_src emacs-lisp
+(setq eshell-atuin-filter-mode 'global)
+#+end_src
+
+In order to switch the mode at runtime, run =M-x eshell-atuin-history= with the prefix argument:
+- =C-u 0 M-x eshell-atuin-history= for =global=
+- =C-u 1 M-x eshell-atuin-history= for =host=
+- =C-u 2 M-x eshell-atuin-history= for =session=
+- =C-u 3 M-x eshell-atuin-history= for =directory=
+
 * Implementation notes
 I may have overengineered the package a bit to scale on lots of records.
 
