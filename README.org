@@ -55,6 +55,11 @@ I suspect the package might be slow if your history has a lot of records (I have
 (setq eshell-atuin-search-options '("--exit" "0" "--limit" "10000"))
 #+end_src
 
+If the package ignores imported history, remove =--exit 0= from the options (see [[https://github.com/SqrtMinusOne/eshell-atuin/issues/9][#9]]).
+#+begin_src emacs-lisp
+(setq eshell-atuin-search-options nil)
+#+end_src
+
 * Usage
 Enable =eshell-atuin-mode= to turn on storing eshell commands in =atuin=.
 
