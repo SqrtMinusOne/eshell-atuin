@@ -492,7 +492,13 @@ Be sure to have the correct `eshell-prompt-regexp' set up!"
     (eshell-atuin--history-update))
   (let* ((commands (eshell-atuin--history-collection))
          (input (eshell-atuin--get-input))
-         (compl (completing-read "History: " commands nil nil input))
+         (completion-table (lambda (string pred action)
+                             (if (eq action 'metadata)
+                                 '(metadata (display-sort-function . identity)
+                                            (cycle-sort-function . identity))
+                               (complete-with-action
+                                action commands string pred))))
+         (compl (completing-read "History: " completion-table nil nil input))
          (command
           (alist-get 'command
                      (gethash compl eshell-atuin--history-cache-format-index))))
