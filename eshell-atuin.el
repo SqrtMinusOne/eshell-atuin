@@ -227,8 +227,11 @@ of the command."
          (when (eq (process-status process) 'exit)
            (unwind-protect
                (unless (= (process-exit-status process) 0)
-                 (error "`atuin history end' returned %s: %s" (process-exit-status process)
-                        (with-current-buffer buf (buffer-string))))
+                 ;; XXX This is `message', not `error' because atuin
+                 ;; sometimes errs out when it can't send data on a
+                 ;; spotty nework
+                 (message "`atuin history end' returned %s: %s" (process-exit-status process)
+                          (with-current-buffer buf (buffer-string))))
              (kill-buffer buf))))))
     (setq eshell-atuin--history-id nil)))
 
