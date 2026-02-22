@@ -171,20 +171,21 @@ This calls \\='atuin history start\\=', save the ID to
 `eshell-atuin--last-command-start'.  The ID will be used to save the
 results of the command in `eshell-atuin--post-exec'."
   (when-let ((input (eshell-atuin--get-input)))
-    (setq eshell-atuin--history-id
-          (with-temp-buffer
-            (with-environment-variables (("ATUIN_SESSION" eshell-atuin--session-id)
-                                         ("ATUIN_HOST_NAME"
-                                          (or (file-remote-p default-directory 'host)
-                                              (system-name))) )
-              (let ((ret (call-process
-                          eshell-atuin-executable nil t nil
-                          "history" "start" "--" input)))
-                (unless (= 0 ret)
-                  (error "`atuin history start' retured %s: %s" ret (buffer-string)))
-                (buffer-substring-no-properties
-                 (point-min) (point-max))))))
-    (setq eshell-atuin--last-command-start (current-time))))
+    (unless (string-empty-p input)
+      (setq eshell-atuin--history-id
+            (with-temp-buffer
+              (with-environment-variables (("ATUIN_SESSION" eshell-atuin--session-id)
+                                           ("ATUIN_HOST_NAME"
+                                            (or (file-remote-p default-directory 'host)
+                                                (system-name))) )
+                (let ((ret (call-process
+                            eshell-atuin-executable nil t nil
+                            "history" "start" "--" input)))
+                  (unless (= 0 ret)
+                    (error "`atuin history start' retured %s: %s" ret (buffer-string)))
+                  (buffer-substring-no-properties
+                   (point-min) (point-max))))))
+      (setq eshell-atuin--last-command-start (current-time)))))
 
 (defun eshell-atuin--post-exec ()
   "Tell atuin that the invoked command has finished.
